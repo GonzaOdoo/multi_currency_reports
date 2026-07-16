@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Part of DigitsCode. See LICENSE file for full copyright and licensing details.
+    © 2025 DigitsCode (Digital Integrated Transformation Solutions)
+    Developer: DigitsCode <info@digitscode.com>
+    Website: https://www.digitscode.com
+-->
+<odoo>
+    <data noupdate="1">
+        <record id="demo_scenario_dependency" model="ir.config_parameter">
+            <field name="key">digits_multi_currency_general_ledger.demo_scenario_dependency</field>
+            <field name="value">Install digits_tools_demo_scenario for SO/PO/history used by this module</field>
+        </record>
+    </data>
+</odoo>

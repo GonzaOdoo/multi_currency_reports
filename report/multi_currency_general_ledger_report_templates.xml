@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Part of DigitsCode. See LICENSE file for full copyright and licensing details.
+    © 2025 DigitsCode (Digital Integrated Transformation Solutions)
+    Developer: DigitsCode <info@digitscode.com>
+    Website: https://www.digitscode.com
+-->
+<odoo>
+    <!-- Main Report Template -->
+    <template id="mcgl_pdf">
+        <t t-call="web.html_container">
+            <t t-call="web.external_layout">
+                <div class="page">
+
+                    <h2 class="text-center">Multi Currency General Ledger</h2>
+                    
+                    <!-- Report Parameters -->
+                    <div class="row mt16 mb16">
+<!--                        <div class="col-4">-->
+<!--                            <strong>Company:</strong> <span t-esc="docs[0].company_id.name" t-if="docs"/>-->
+<!--                        </div>-->
+                        <div class="col-4">
+                            <t t-if="form.get('date_from')">
+                                <strong>From:</strong> <span t-esc="form['date_from']" t-options="{'widget': 'date'}"/>
+                            </t>
+                        </div>
+                        <div class="col-4">
+                            <t t-if="form.get('date_to')">
+                                <strong>To:</strong> <span t-esc="form['date_to']" t-options="{'widget': 'date'}"/>
+                            </t>
+                        </div>
+                    </div>
+                    <div class="row mb16">
+                        <div class="col-4">
+                            <strong>Target Moves:</strong> 
+                            <span t-if="form.get('target_move') == 'posted'">All Posted Entries</span>
+                            <span t-else="">All Entries</span>
+                        </div>
+                        <div class="col-8">
+                            <strong>Display Accounts:</strong> 
+                            <span t-if="form.get('display_account') == 'all'">All</span>
+                            <span t-elif="form.get('display_account') == 'movement'">With movements</span>
+                            <span t-elif="form.get('display_account') == 'not_zero'">With balance not equal to zero</span>
+                        </div>
+                    </div>
+                    
+                    <!-- For each account -->
+                    <t t-foreach="docs" t-as="account">
+                        <t t-set="account_id" t-value="account.id"/>
+                        
+                        <!-- Only process accounts with data -->
+                        <t t-if="results and account_id in results">
+                            <!-- Check if account has data in any currency -->
+                            <t t-set="has_data" t-value="False"/>
+                            <t t-set="has_balance" t-value="False"/>
+                            
+                            <t t-foreach="currencies" t-as="currency">
+                                <t t-set="currency_id" t-value="currency.id"/>
+                                <t t-if="currency_id in results[account_id]">
+                                    <t t-if="results[account_id][currency_id].get('lines')">
+                                        <t t-set="has_data" t-value="True"/>
+                                    </t>
+                                    <t t-if="results[account_id][currency_id].get('balance', 0) != 0 or results[account_id][currency_id].get('init_balance', 0) != 0">
+                                        <t t-set="has_balance" t-value="True"/>
+                                    </t>
+                                </t>
+                            </t>
+                            
+                            <!-- Display account based on settings -->
+                            <t t-if="form.get('display_account') == 'all' or 
+                                     (form.get('display_account') == 'movement' and has_data) or 
+                                     (form.get('display_account') == 'not_zero' and has_balance)">
+                                
+                                <!-- Account Header -->
+                                <h3 class="mt32"><t t-esc="account.code"/> - <t t-esc="account.name"/></h3>
+                                <p><strong>Account Type:</strong> <t t-esc="account.account_type"/></p>
+                                
+                                <!-- For each currency that has data for this account -->
+                                <t t-foreach="currencies" t-as="currency">
+                                    <t t-set="currency_id" t-value="currency.id"/>
+                                    
+                                    <t t-if="currency_id in results[account_id]">
+                                        <t t-set="account_data" t-value="results[account_id][currency_id]"/>
+                                        
+                                        <!-- Display currency based on settings -->
+                                        <t t-if="(account_data.get('lines') or account_data.get('init_balance', 0) != 0) and
+                                                 (form.get('display_account') == 'all' or 
+                                                  (form.get('display_account') == 'movement' and account_data.get('lines')) or 
+                                                  (form.get('display_account') == 'not_zero' and (account_data.get('balance', 0) != 0 or account_data.get('init_balance', 0) != 0)))">
+                                            
+                                            <!-- Currency Header -->
+                                            <h4 class="mt16 mb8"><t t-esc="currency.name"/> (<t t-esc="currency.symbol"/>)</h4>
+                                            
+                                            <!-- Table -->
+                                            <table class="table table-sm table-bordered">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Date</th>
+                                                        <th>Journal Entry</th>
+                                                        <th>Journal</th>
+                                                        <th>Description</th>
+                                                        <th>Partner</th>
+                                                        <th class="text-right">Debit (<t t-esc="currency.symbol"/>)</th>
+                                                        <th class="text-right">Credit (<t t-esc="currency.symbol"/>)</th>
+                                                        <th class="text-right">Balance (<t t-esc="currency.symbol"/>)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <!-- Initial Balance -->
+                                                    <t t-set="running_balance" t-value="0"/>
+                                                    <t t-if="form.get('show_init_balance') and account_data.get('init_balance') != 0">
+                                                        <t t-set="init_balance" t-value="account_data.get('init_balance', 0)"/>
+                                                        <t t-set="running_balance" t-value="init_balance"/>
+                                                        <tr>
+                                                            <td><t t-esc="form['date_from']" t-options="{'widget': 'date'}"/></td>
+                                                            <td></td>
+                                                            <td></td>
+                                                            <td>Initial Balance</td>
+                                                            <td></td>
+                                                            <td class="text-right">
+                                                                <t t-if="init_balance &gt; 0">
+                                                                    <t t-esc="init_balance" t-options="{'widget': 'monetary', 'display_currency': currency}"/>
+                                                                </t>
+                                                            </td>
+                                                            <td class="text-right">
+                                                                <t t-if="init_balance &lt; 0">
+                                                                    <t t-esc="-init_balance" t-options="{'widget': 'monetary', 'display_currency': currency}"/>
+                                                                </t>
+                                                            </td>
+                                                            <td class="text-right">
+                                                                <t t-esc="init_balance" t-options="{'widget': 'monetary', 'display_currency': currency}"/>
+                                                            </td>
+                                                        </tr>
+                                                    </t>
+                                                    
+                                                    <!-- Movement Lines -->
+                                                    <t t-foreach="account_data.get('lines', [])" t-as="line">
+                                                        <t t-set="running_balance" t-value="running_balance + line.get('balance', 0)"/>
+                                                        <tr>
+                                                            <td><t t-esc="line.get('date')" t-options="{'widget': 'date'}"/></td>
+                                                            <td><t t-esc="line.get('move_name', '')"/></td>
+                                                            <td><t t-esc="line.get('journal_name', '')"/></td>
+                                                            <td><t t-esc="line.get('name', '')"/></td>
+                                                            <td><t t-esc="line.get('partner_name', '')"/></td>
+                                                            <td class="text-right"><t t-esc="line.get('debit', 0)" t-options="{'widget': 'monetary', 'display_currency': currency}"/></td>
+                                                            <td class="text-right"><t t-esc="line.get('credit', 0)" t-options="{'widget': 'monetary', 'display_currency': currency}"/></td>
+                                                            <td class="text-right"><t t-esc="running_balance" t-options="{'widget': 'monetary', 'display_currency': currency}"/></td>
+                                                        </tr>
+                                                    </t>
+                                                    
+                                                    <!-- Total -->
+                                                    <tr class="table-active">
+                                                        <td colspan="5"><strong>Total</strong></td>
+                                                        <td class="text-right">
+                                                            <strong>
+                                                                <t t-esc="account_data.get('total_debit', 0) + (account_data.get('init_balance', 0) if account_data.get('init_balance', 0) &gt; 0 else 0)" t-options="{'widget': 'monetary', 'display_currency': currency}"/>
+                                                            </strong>
+                                                        </td>
+                                                        <td class="text-right">
+                                                            <strong>
+                                                                <t t-esc="account_data.get('total_credit', 0) + (-account_data.get('init_balance', 0) if account_data.get('init_balance', 0) &lt; 0 else 0)" t-options="{'widget': 'monetary', 'display_currency': currency}"/>
+                                                            </strong>
+                                                        </td>
+                                                        <td class="text-right">
+                                                            <strong>
+                                                                <t t-esc="account_data.get('balance', 0)" t-options="{'widget': 'monetary', 'display_currency': currency}"/>
+                                                            </strong>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </t>
+                                    </t>
+                                </t>
+                            </t>
+                        </t>
+                    </t>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>
