@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates>
+    <!-- Extend the main filter template -->
+    <t t-inherit="account_reports.AccountReportFilters" t-inherit-mode="extension">
+        <xpath expr="." position="inside">
+            <t t-if="'currencies' in controller.options">
+                <div class="o_currency_filter">
+                    <t t-call="discount_button_on_invoice.AccountReportCurrenciesData"/>
+                </div>
+            </t>
+        </xpath>
+    </t>
+    <t t-inherit="account_reports.AgedPartnerBalanceFilters" t-inherit-mode="extension">
+        <xpath expr="." position="inside">
+            <t t-if="'currencies' in controller.options">
+                <div>
+                    <t t-call="discount_button_on_invoice.AccountReportCurrenciesData"/>
+                </div>
+            </t>
+        </xpath>
+    </t>
+</templates>

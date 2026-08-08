@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="account_move_discount_wizard_form" model="ir.ui.view">
+        <field name="name">account.move.discount.form</field>
+        <field name="model">account.move.discount</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <field name="move_id" invisible="1"/>
+                    <field name="currency_id" invisible="1"/>
+                    <div class="row">
+                        <div class="col-sm-5 col-md-4 col-lg-4 col-4">
+                            <group>
+                                <label for="discount_amount" string="Monto fijo" invisible="discount_type != 'fixed_amount'"/>
+                                <field name="discount_amount" invisible="discount_type != 'fixed_amount'" nolabel="1"/>
+
+                                <label for="discount_percentage"
+                                       string="Porcentaje"
+                                       invisible="discount_type not in ('line_discount', 'global_discount')"/>
+                                <field name="discount_percentage"
+                                       invisible="discount_type not in ('line_discount', 'global_discount')"
+                                       widget="percentage" nolabel="1"/>
+                            </group>
+                        </div>
+
+                        <div class="col-sm-7 col-md-8 col-lg-8 col-8">
+                            <field name="discount_type" widget="radio"/>
+                        </div>
+                    </div>
+                </sheet>
+
+                <footer>
+                    <button type="object"
+                            string="Aplicar descuento"
+                            name="action_apply_discount"
+                            class="btn-primary"
+                            data-hotkey="q"/>
+                    <button special="cancel"
+                            string="Cancelar"
+                            class="btn-secondary"
+                            data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+     <record id="view_move_form_inherit_discount" model="ir.ui.view">
+        <field name="name">account.move.form.inherit.discount</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <!-- Insertar botón después de invoice_line_ids -->
+            <xpath expr="//field[@name='invoice_line_ids']" position="after">
+                <div class="float-end d-flex gap-1 mb-2 ms-1"
+                             name="so_button_below_order_lines">
+                            <button string="Descuento"
+                                    name="action_open_discount_wizard"
+                                    type="object"
+                                    class="btn btn-secondary"
+                                    />
+                        </div>
+
+                <div class="float-end d-flex gap-1 mb-2 ms-1"
+                             name="so_button_below_order_lines">
+                            <button string="Envio"
+                                    name="action_open_delivery_wizard"
+                                    type="object"
+                                    class="btn btn-secondary"
+                                    />
+                        </div>
+            </xpath>
+        </field>
+    </record>
+
+    
+</odoo>

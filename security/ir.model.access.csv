@@ -1,2 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_multi_currency_general_ledger_wizard,access.multi.currency.general.ledger.wizard,model_multi_currency_general_ledger_wizard,account.group_account_user,1,1,1,1
+access_account_move_discount,account.move.discount,model_account_move_discount,base.group_user,1,0,1,0
+access_choose_delivery_carrier_invoice,choose.delivery.carrier.invoice,model_choose_delivery_carrier_invoice,base.group_user,1,1,1,0

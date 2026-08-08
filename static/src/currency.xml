@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates>
+    <!-- Extension Data -->
+    <t t-name="discount_button_on_invoice.AccountReportCurrenciesData">
+        <Dropdown>
+            <button class="btn btn-secondary">
+                <i class="fa fa-money me-1"/>
+                <t t-if="historicalMode">USD Histórico</t>
+                <t t-else="" t-out="controller.options.selected_currencies"/>
+            </button>
+            <t t-set-slot="content">
+                <t t-foreach="controller.options.currencies" t-as="currency" t-key="currency_index">
+                    <DropdownItem
+                        class="{ 'selected': this.isCurrencySelected(currency), 'ps-4': true }"
+                        onSelected="() => this.OnSelectCurrency(currency)"
+                    >
+                        <t t-esc="currency.name"/>
+                    </DropdownItem>
+                </t>
+                <t t-if="'historical_currency' in controller.options">
+                    <DropdownItem
+                        class="{ selected: historicalMode, 'ps-4': true }"
+                        onSelected="() => this.setHistoricalMode(!historicalMode)"
+                    >
+                        USD Histórico
+                    </DropdownItem>
+                </t>
+                <t t-if="'only_usd' in controller.options">
+                    <div role="separator" class="dropdown-divider"/>
+                    <DropdownItem
+                        class="{ selected: onlyUsd, 'ps-4': true }"
+                        onSelected="() => this.setOnlyUsd(!onlyUsd)"
+                    >
+                        <i t-if="onlyUsd" class="fa fa-check me-2"/>
+                        Sólo movimientos en USD
+                    </DropdownItem>
+                </t>
+            </t>
+        </Dropdown>
+    </t>
+        
+</templates>
