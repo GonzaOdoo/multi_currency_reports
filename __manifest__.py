@@ -20,13 +20,13 @@
     'version': '1.0',
 
     # any module necessary for this one to work correctly
-    'depends': ['account_budget_purchase','project_account_budget','project_purchase','account_reports','account_budget','analytic'],
+    'depends': ['project_purchase','project_hr_expense','project_stock_account','sale_project','account_budget_purchase','project_account_budget','account_reports','account_budget','analytic'],
 
     # always loaded
-    "data": ["security/ir.model.access.csv",
-             "views/delivery_carrier.xml",
+    "data": ["views/project_views.xml",
+             "views/account_analytic.xml",
              #'data/general_ledger.xml',
-             'data/partner_ledger.xml',
+             #'data/partner_ledger.xml',
             ],
 
     'assets': {

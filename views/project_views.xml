@@ -1,0 +1,13 @@
+<odoo>
+    <record id="project_edit_project_view_inherit_currency" model="ir.ui.view">
+        <field name="name">project.edit.project.view.inherit.currency</field>
+        <field name="model">project.project</field>
+        <field name="inherit_id" ref="project.edit_project"/>
+        <field name="arch" type="xml">
+            <xpath expr="/form//field[@name='date_start']" position="after">
+                <field name="display_currency_id"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

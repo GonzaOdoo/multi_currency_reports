@@ -13,12 +13,13 @@ class ProjectProject(models.Model):
     total_budget_progress = fields.Float("Budget Spent", compute="_compute_budget", export_string_translation=False)
     display_currency_id = fields.Many2one(
         'res.currency',
-        string='Display Currency',
+        string='Moneda',
         default=lambda self: self.env.company.currency_id,
         tracking=True,
         help="Currency used to display financial figures (profitability, budget) on this project's dashboard. "
              "Amounts are converted from their original currency using the exchange rate on each transaction date.",
     )
+    purchase_orders_count = fields.Integer('# Purchase Orders', compute='_compute_purchase_orders_count', groups='purchase.group_purchase_user', export_string_translation=False)
 
     @api.depends('display_currency_id')
     @api.depends_context('company')
@@ -321,55 +322,174 @@ class ProjectProject(models.Model):
             'total': {'to_invoice': total_to_invoice, 'invoiced': total_invoiced},
         }
 
-    def _get_expenses_profitability_items(self, with_action=True):
-        if not self.account_id:
-            return {}
-        can_see_expense = with_action and self.env.user.has_group('hr_expense.group_hr_expense_team_approver')
-    
-        company = self.company_id or self.env.company
-        project_currency = self.currency_id
-        today = fields.Date.context_today(self)
-    
-        expenses_read_group = self.env['hr.expense']._read_group(
-            [
-                ('state', 'in', ['posted', 'in_payment', 'paid']),
-                ('analytic_distribution', 'in', self.account_id.ids),
-            ],
-            groupby=['currency_id', 'date'],
-            aggregates=['id:array_agg', 'untaxed_amount_currency:sum'],
-        )
-        if not expenses_read_group:
-            return {}
-        expense_ids = []
-        amount_billed = 0.0
-        for currency, date, ids, untaxed_amount_currency_sum in expenses_read_group:
-            if can_see_expense:
-                expense_ids.extend(ids)
-            amount_billed += currency._convert(
-                from_amount=untaxed_amount_currency_sum,
-                to_currency=project_currency,
-                company=company,
-                date=date or today,
+    def _compute_purchase_orders_count(self):
+        purchase_orders_per_project = dict(
+            self.env['purchase.order']._read_group(
+                domain=[
+                    ('project_id', 'in', self.ids),
+                    ('order_line', '!=', False),
+                ],
+                groupby=['project_id'],
+                aggregates=['id:array_agg'],
             )
-    
-        section_id = 'expenses'
-        expense_profitability_items = {
-            'costs': {'id': section_id, 'sequence': self._get_profitability_sequence_per_invoice_type()[section_id], 'billed': -amount_billed, 'to_bill': 0.0},
+        )
+        purchase_orders_count_per_project_from_lines = dict(
+            self.env['purchase.order.line']._read_group(
+                domain=[
+                    ('order_id', 'not in', [order_id for values in purchase_orders_per_project.values() for order_id in values]),
+                    ('analytic_distribution', 'in', self.account_id.ids),
+                ],
+                groupby=['analytic_distribution'],
+                aggregates=['__count'],
+            )
+        )
+
+        projects_no_account = self.filtered(lambda project: not project.account_id)
+        for project in projects_no_account:
+            project.purchase_orders_count = len(purchase_orders_per_project.get(project, []))
+
+        purchase_orders_per_project = {project.account_id.id: len(orders) for project, orders in purchase_orders_per_project.items()}
+        for project in (self - projects_no_account):
+            project.purchase_orders_count = purchase_orders_per_project.get(project.account_id.id, 0) + purchase_orders_count_per_project_from_lines.get(project.account_id.id, 0)
+
+    # ----------------------------
+    #  Actions
+    # ----------------------------
+
+    def action_open_project_purchase_orders(self):
+        purchase_orders = self.env['purchase.order.line'].search([
+            '|',
+                ('analytic_distribution', 'in', self.account_id.ids),
+                ('order_id.project_id', '=', self.id),
+        ]).order_id
+        action_window = {
+            'name': self.env._('Purchase Orders'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'purchase.order',
+            'views': [
+                [False, 'list'], [self.env.ref('purchase.purchase_order_view_kanban_without_dashboard').id, 'kanban'],
+                [False, 'form'], [False, 'calendar'], [False, 'pivot'], [False, 'graph'], [False, 'activity'],
+            ],
+            'domain': [('id', 'in', purchase_orders.ids)],
+            'context': {
+                'default_project_id': self.id,
+            },
+            'help': "<p class='o_view_nocontent_smiling_face'>%s</p><p>%s</p>" % (
+                _("No purchase order found. Let's create one."),
+                _("Once you ordered your products from your supplier, confirm your request for quotation and it will turn "
+                    "into a purchase order."),
+            ),
         }
-        if can_see_expense:
-            args = [section_id, [('id', 'in', expense_ids)]]
-            if len(expense_ids) == 1:
-                args.append(expense_ids[0])
-            action = {'name': 'action_profitability_items', 'type': 'object', 'args': json.dumps(args)}
-            expense_profitability_items['costs']['action'] = action
-        return expense_profitability_items
+        if len(purchase_orders) == 1 and not self.env.context.get('from_embedded_action'):
+            action_window['views'] = [[False, 'form']]
+            action_window['res_id'] = purchase_orders.id
+        return action_window
+
+    def action_profitability_items(self, section_name, domain=None, res_id=False):
+        if section_name == 'purchase_order':
+            action = {
+                'name': self.env._('Purchase Orders'),
+                'type': 'ir.actions.act_window',
+                'res_model': 'purchase.order',
+                'views': [[False, 'list'], [False, 'form']],
+                'domain': domain,
+                'context': {
+                    'create': False,
+                    'edit': False,
+                },
+            }
+            if res_id:
+                action['res_id'] = res_id
+                if 'views' in action:
+                    action['views'] = [
+                        (view_id, view_type)
+                        for view_id, view_type in action['views']
+                        if view_type == 'form'
+                    ] or [False, 'form']
+                action['view_mode'] = 'form'
+            return action
+        return super().action_profitability_items(section_name, domain, res_id)
+
+    # ----------------------------
+    #  Project Updates
+    # ----------------------------
+
+    def _get_stat_buttons(self):
+        buttons = super()._get_stat_buttons()
+        if self.env.user.has_group('purchase.group_purchase_user'):
+            buttons.append({
+                'icon': 'credit-card',
+                'text': self.env._('Purchase Orders'),
+                'number': self.purchase_orders_count,
+                'action_type': 'object',
+                'action': 'action_open_project_purchase_orders',
+                'show': self.purchase_orders_count > 0,
+                'sequence': 36,
+            })
+        return buttons
+
+    def _get_profitability_aal_domain(self):
+        return Domain.AND([
+            super()._get_profitability_aal_domain(),
+            ['|', ('move_line_id', '=', False), ('move_line_id.purchase_line_id', '=', False)],
+        ])
+
+    def _add_purchase_items(self, profitability_items, with_action=True):
+        return False
+
+    def _get_profitability_labels(self):
+        labels = super()._get_profitability_labels()
+        labels['purchase_order'] = self.env._('Purchase Orders')
+        return labels
+
+    def _get_profitability_sequence_per_invoice_type(self):
+        sequence_per_invoice_type = super()._get_profitability_sequence_per_invoice_type()
+        sequence_per_invoice_type['purchase_order'] = 10
+        return sequence_per_invoice_type
 
     def _get_profitability_items(self, with_action=True):
         profitability_items = super()._get_profitability_items(with_action)
+        # Defensa: si por instalación duplicada hay más de una entrada
+        # 'expenses' en costs o revenues, nos quedamos solo con la primera
+        # y sumamos el resto en ella, para evitar keys repetidas en el t-foreach.
+        for section_key, amount_fields in (
+            ('costs', ('billed', 'to_bill')),
+            ('revenues', ('invoiced', 'to_invoice')),
+        ):
+            section = profitability_items.get(section_key)
+            if not section:
+                continue
+            seen = {}
+            deduped_data = []
+            for item in section['data']:
+                item_id = item.get('id')
+                if item_id == 'expenses' and item_id in seen:
+                    # ya vimos una entrada 'expenses': sumamos montos y descartamos duplicado
+                    first = seen[item_id]
+                    for fname in amount_fields:
+                        first[fname] = first.get(fname, 0.0) + item.get(fname, 0.0)
+                    continue
+                deduped_data.append(item)
+                if item_id == 'expenses':
+                    seen[item_id] = item
+            section['data'] = deduped_data
+            _logger.info(deduped_data)
         if self.account_id:
             company = self.company_id or self.env.company
             today = fields.Date.context_today(self)
-
+    
+            # Idempotencia: si alguna otra clase en la cadena de herencia
+            # ya agregó una sección 'purchase_order', la sacamos antes de
+            # recalcular la nuestra, para no duplicar sin importar cuántas
+            # fuentes contribuyan a este método.
+            costs = profitability_items['costs']
+            section_id = 'purchase_order'
+            existing = next((item for item in costs['data'] if item.get('id') == section_id), None)
+            if existing:
+                costs['data'].remove(existing)
+                costs['total']['billed'] -= existing.get('billed', 0.0)
+                costs['total']['to_bill'] -= existing.get('to_bill', 0.0)
+    
             purchase_lines = self.env['purchase.order.line'].sudo().search([
                 ('analytic_distribution', 'in', self.account_id.ids),
                 ('state', 'in', 'purchase')
@@ -388,7 +508,6 @@ class ProjectProject(models.Model):
                     po_date = po_date.date() if po_date else today
                     price_subtotal = purchase_line.currency_id._convert(
                         purchase_line.price_subtotal, self.currency_id, company, po_date)
-                    # an analytic account can appear several time in an analytic distribution with different repartition percentage
                     analytic_contribution = sum(
                         percentage for ids, percentage in purchase_line.analytic_distribution.items()
                         if str(self.account_id.id) in ids.split(',')
@@ -404,7 +523,6 @@ class ProjectProject(models.Model):
                         )
                     )
                     if invoice_lines:
-                        # Calculate total invoiced amount (posted + draft, excluding refunds for unbilled calculation)
                         total_invoiced_amount = 0.0
                         for line in invoice_lines:
                             line_date = line.date or today
@@ -412,26 +530,21 @@ class ProjectProject(models.Model):
                                 line.price_subtotal, self.currency_id, company, line_date)
                             if not line.analytic_distribution:
                                 continue
-                            # an analytic account can appear several time in an analytic distribution with different repartition percentage
                             analytic_contribution = sum(
                                 percentage for ids, percentage in line.analytic_distribution.items()
                                 if str(self.account_id.id) in ids.split(',')
                             ) / 100.
                             cost = price_subtotal * analytic_contribution * (-1 if line.is_refund else 1)
-                            # Only count non-refund invoices for unbilled calculation
                             if not line.is_refund:
                                 total_invoiced_amount += cost
                             if line.parent_state == 'posted':
                                 amount_invoiced -= cost
                             else:
                                 amount_to_invoice -= cost
-                        # Calculate the unbilled portion: PO amount - total invoiced amount (non-refunds only)
                         amount_to_invoice -= purchase_line_amount_to_invoice - total_invoiced_amount
                     else:
                         amount_to_invoice -= purchase_line_amount_to_invoice
-
-                costs = profitability_items['costs']
-                section_id = 'purchase_order'
+    
                 purchase_order_costs = {'id': section_id, 'sequence': self._get_profitability_sequence_per_invoice_type()[section_id], 'billed': amount_invoiced, 'to_bill': amount_to_invoice}
                 if with_action:
                     purchase_order = purchase_lines.order_id
@@ -449,5 +562,13 @@ class ProjectProject(models.Model):
                 ('price_subtotal', '!=', 0),
                 ('id', 'not in', purchase_order_line_invoice_line_ids),
             ]
-            self._get_costs_items_from_purchase(domain, profitability_items, with_action=with_action)
+            
+            #self._get_costs_items_from_purchase(
+            #    domain,
+            #    profitability_items,
+            #    with_action=with_action,
+            #)
+            
+
+        _logger.info(profitability_items)
         return profitability_items

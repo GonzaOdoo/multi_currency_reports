@@ -1,0 +1,14 @@
+<odoo>
+    <record id="account_invoice_report_view_tree_inherit_usd" model="ir.ui.view">
+        <field name="name">account.invoice.report.view.tree.inherit.usd</field>
+        <field name="model">account.invoice.report</field>
+        <field name="inherit_id" ref="account.account_invoice_report_view_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="inside">
+                <field name="price_subtotal_usd_current" widget="Monetary"/>
+                <field name="price_total_usd_current" widget="Monetary"/>
+                <field name="usd_currency_id" column_invisible="True"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

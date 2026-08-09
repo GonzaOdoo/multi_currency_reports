@@ -6,13 +6,13 @@ class AccountInvoiceReport(models.Model):
     _inherit = "account.invoice.report"
 
     price_subtotal_usd_current = fields.Monetary(
-        string="Subtotal USD actual",
+        string="Subtotal USD",
         currency_field="usd_currency_id",
         readonly=True,
     )
 
     price_total_usd_current = fields.Monetary(
-        string="Total USD Actual",
+        string="Total USD",
         currency_field="usd_currency_id",
         readonly=True,
     )
@@ -50,22 +50,22 @@ class AccountInvoiceReport(models.Model):
             usd_currency_id=self.env.ref("base.USD").id,
         )
 
-
+    
     @api.model
     def _from(self) -> SQL:
         return SQL(
             """
             %(base_from)s
-
+    
             LEFT JOIN LATERAL (
                 SELECT rate
                 FROM res_currency_rate
                 WHERE currency_id = %(usd_currency_id)s
-                AND name <= CURRENT_DATE
+                AND name <= move.date
                 ORDER BY name DESC
                 LIMIT 1
             ) usd_rate ON TRUE
-
+    
             """,
             base_from=super()._from(),
             usd_currency_id=self.env.ref("base.USD").id,

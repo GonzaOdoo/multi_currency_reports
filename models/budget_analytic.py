@@ -7,7 +7,7 @@ class BudgetAnalytic(models.Model):
 
     currency_id = fields.Many2one(
         'res.currency',
-        string='Currency',
+        string='Moneda',
         required=True,
         default=lambda self: self.env.company.currency_id,
         tracking=True,

@@ -1,5 +1,12 @@
 from odoo import models, _, api
 from odoo.exceptions import AccessError
+
+from odoo.tools import SQL
+from odoo.tools.misc import format_date
+
+from dateutil.relativedelta import relativedelta
+from itertools import chain
+import logging
 import datetime
 import pprint
 NUMBER_FIGURE_TYPES = ('float', 'integer', 'monetary', 'percentage')
@@ -16,8 +23,9 @@ class AccountReport(models.Model):
         historical = previous_options.get('historical_currency', False)
         selected_currency_id = previous_options.get('selected_currencies_id')
 
+        if selected_currency_id and selected_currency_id != self.env.company.currency_id.id:
+            historical = False
         if historical:
-            # Excluyente: si histórico está activo, no hay moneda seleccionada
             selected_currency_id = False
 
         options['currencies'] = [
@@ -31,6 +39,11 @@ class AccountReport(models.Model):
         else:
             options['selected_currencies'] = self.env.company.currency_id.name
 
+        # Histórico USD: aplica a cualquier reporte que use este filtro de moneda.
+        options['historical_currency'] = historical
+        options['historical_currency_id'] = self.env.ref('base.USD').id if historical else False
+        options['currency_self_handled_report'] = historical
+        
     def _build_column_dict(self, col_value, col_data, options=None, currency=False, digits=1,
                            column_expression=None, has_sublines=False, report_line_id=None):
         if col_value is None and col_data is None:
@@ -103,3 +116,32 @@ class AccountReport(models.Model):
             'millions': f'M{currency_symbol}',
         }
 
+
+
+    
+    def _compute_formula_batch(self, column_group_options, engine, date_scope, formulas_dict, current_groupby, next_groupby, offset=0, limit=None, warnings=None):
+        if column_group_options.get('historical_currency') and engine in ('domain', 'account_codes', 'tax_tags'):
+            return super(AccountReport, self.with_context(historical_currency_usd=True))._compute_formula_batch(
+                column_group_options, engine, date_scope, formulas_dict, current_groupby, next_groupby,
+                offset=offset, limit=limit, warnings=warnings,
+            )
+        return super()._compute_formula_batch(
+            column_group_options, engine, date_scope, formulas_dict, current_groupby, next_groupby,
+            offset=offset, limit=limit, warnings=warnings,
+        )
+
+    def _currency_table_apply_rate(self, value: SQL) -> SQL:
+        if self.env.context.get('historical_currency_usd'):
+            usd = self.env.ref('base.USD')
+            return SQL(
+                """
+                (%(value)s) * COALESCE((
+                    SELECT r.rate FROM res_currency_rate r
+                    WHERE r.currency_id = %(usd)s AND r.name <= account_move_line.date
+                    ORDER BY r.name DESC LIMIT 1
+                ), 0)
+                """,
+                value=value,
+                usd=usd.id,
+            )
+        return super()._currency_table_apply_rate(value)

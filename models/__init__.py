@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from . import general_ledger
+from . import general
 from . import aged_report
 from . import partner_ledger
 from . import account_invoice_report
@@ -9,3 +9,4 @@ from . import analytic
 from . import currency_rate
 from . import budget_analytic
 from . import project_project
+#from . import project_purchase
