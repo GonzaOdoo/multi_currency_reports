@@ -53,8 +53,6 @@ class AccountReport(models.Model):
         col_data = col_data or {}
         expression_label = col_data.get('expression_label')
     
-        # Moneda objetivo: la elegida en el dropdown, o la fijada por un handler
-        # en modo "autoconvertido" (ej. histórico USD del general ledger).
         target_currency_id = options.get('selected_currencies_id') or options.get('historical_currency_id')
         self_handled_columns = options.get('currency_self_handled_columns') or set()
         skip_value_conversion = (
@@ -83,7 +81,7 @@ class AccountReport(models.Model):
                          and not options['column_groups'][col_group_key]['forced_options'].get('compute_budget'),
             'blank_if_zero': column_expression.blank_if_zero or col_data.get('blank_if_zero', False),
             'column_group_key': col_group_key,
-            'currency': currency.id if currency else None,
+            'currency': currency or None,
             'currency_symbol': self.env.company.currency_id.symbol if options.get('multi_currency') else None,
             'digits': digits,
             'expression_label': expression_label,
