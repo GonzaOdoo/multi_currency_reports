@@ -34,8 +34,9 @@
             (
                 'after',
                 'project_account_budget/static/src/components/**/*',
-                'multi_currency_reports/static/src/*',
+                'multi_currency_reports/static/src/xml/project_right_side_panel_budget_lines.xml',
             ),
+            'multi_currency_reports/static/src/*',  # tu patch de formatMonetary, si sigue viviendo ahí
         ],
     },
 }

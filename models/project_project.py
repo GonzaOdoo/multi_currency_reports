@@ -112,7 +112,7 @@ class ProjectProject(models.Model):
                 break
     
         company = self.company_id or self.env.company
-        display_currency = self.currency_id  # moneda de visualización del proyecto
+        display_currency = self.currency_id
         today = fields.Date.context_today(self)
     
         total_allocated = total_spent = 0.0
@@ -129,14 +129,13 @@ class ProjectProject(models.Model):
                 **({
                     'ids': [],
                     'budgets': [],
+                    'lines': [],
                 } if can_see_budget_items else {})
             }
         )
     
         for budget_analytic, _dummy, allocated, spent, ids in budget_lines:
             budget_currency = budget_analytic.currency_id
-            # Convertimos a la moneda de visualización del proyecto, sea cual sea
-            # la moneda propia en la que se cargó este presupuesto
             if budget_currency != display_currency:
                 allocated_dc = budget_currency._convert(allocated, display_currency, company, today)
                 spent_dc = budget_currency._convert(spent, display_currency, company, today)
@@ -169,6 +168,35 @@ class ProjectProject(models.Model):
                 }
                 budget_data['budgets'].append(budget_item)
                 budget_data['ids'] += ids
+    
+                # Desglose por línea individual, mismos campos que el resumen
+                for budget_line in self.env['budget.line'].browse(ids):
+                    line_allocated = budget_line.budget_amount
+                    line_spent = budget_line.achieved_amount
+                    if budget_currency != display_currency:
+                        line_allocated_dc = budget_currency._convert(line_allocated, display_currency, company, today)
+                        line_spent_dc = budget_currency._convert(line_spent, display_currency, company, today)
+                    else:
+                        line_allocated_dc = line_allocated
+                        line_spent_dc = line_spent
+                
+                    analytic_accounts = [
+                        budget_line[fname].display_name
+                        for fname in budget_line._get_plan_fnames()
+                        if budget_line[fname]
+                    ]
+                    line_name = '; '.join(analytic_accounts) if analytic_accounts else _('Line')
+                
+                    budget_data['lines'].append({
+                        'id': budget_line.id,
+                        'name': line_name,
+                        'currency_id': display_currency.id,
+                        'allocated': line_allocated_dc,
+                        'spent': line_spent_dc,
+                        'date_from': budget_line.date_from,
+                        'date_to': budget_line.date_to,
+                        'progress': line_allocated_dc and (line_spent_dc - line_allocated_dc) / abs(line_allocated_dc) * (-1 if budget_analytic.budget_type == 'expense' else 1),
+                    })
             else:
                 budget_data['budgets'] = []
     
@@ -202,6 +230,7 @@ class ProjectProject(models.Model):
             budget_items['form_view_id'] = self.env.ref('project_account_budget.view_budget_analytic_form_dialog').id
             budget_items['company_id'] = self.company_id.id or self.env.company.id
         return budget_items
+        
         
     def _get_budget_items_domain(self):
         self.ensure_one()
