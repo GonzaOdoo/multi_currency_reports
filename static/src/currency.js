@@ -4,38 +4,16 @@ import { AgedPartnerBalanceFilters } from "@account_reports/components/aged_part
 import { patch } from "@web/core/utils/patch";
 
 const currencyFilterMethods = {
-    async OnSelectCurrency(currency) {
-        const wasHistorical = this.historicalMode;
-        currency.selected = !currency.selected;
+    async onSelectCurrencyGroup(currencyGroup) {
+        const newGroupId = this.selectedCurrencyGroupId === currencyGroup.id ? false : currencyGroup.id;
 
-        if (currency.selected) {
-            this.controller.options.selected_currencies_id = parseInt(currency.id);
-            this.controller.options.selected_currencies = currency.name;
-        } else {
-            this.controller.options.selected_currencies_id = false;
-        }
-
-        if (wasHistorical) {
-            this.controller.cachedFilterOptions.historical_currency = false;
-            this.controller.options.historical_currency = false;
-        }
-
-        await this.controller.reload("currencies", this.controller.options);
-    },
-    async setHistoricalMode(enabled) {
-        if (this.controller.cachedFilterOptions.historical_currency === enabled) {
+        if (this.controller.cachedFilterOptions.selected_currency_group_id === newGroupId) {
             return;
         }
-        if (enabled) {
-            for (const currency of this.controller.options.currencies || []) {
-                currency.selected = false;
-            }
-            this.controller.options.selected_currencies_id = false;
-            this.controller.options.selected_currencies = false;
-        }
+
         await this.filterClicked({
-            optionKey: "historical_currency",
-            optionValue: enabled,
+            optionKey: "selected_currency_group_id",
+            optionValue: newGroupId,
             reload: true,
         });
     },
@@ -49,11 +27,11 @@ const currencyFilterMethods = {
             reload: true,
         });
     },
-    isCurrencySelected(currency) {
-        return currency.selected && !this.historicalMode;
+    isCurrencyGroupSelected(currencyGroup) {
+        return this.selectedCurrencyGroupId === currencyGroup.id;
     },
-    get historicalMode() {
-        return this.controller.cachedFilterOptions.historical_currency || false;
+    get selectedCurrencyGroupId() {
+        return this.controller.cachedFilterOptions.selected_currency_group_id || false;
     },
     get onlyUsd() {
         return this.controller.cachedFilterOptions.only_usd || false;

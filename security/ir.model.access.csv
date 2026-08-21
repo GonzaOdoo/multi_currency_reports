@@ -1,3 +1,2 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_account_move_discount,account.move.discount,model_account_move_discount,base.group_user,1,0,1,0
-access_choose_delivery_carrier_invoice,choose.delivery.carrier.invoice,model_choose_delivery_carrier_invoice,base.group_user,1,1,1,0
+access_account_report_currency_group_user,account.report.currency.group user,model_account_report_currency_group,base.group_user,1,1,1,1

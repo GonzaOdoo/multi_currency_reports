@@ -1,49 +1,31 @@
-from odoo import models, _, api
-from odoo.exceptions import AccessError
-
+from odoo import models, fields, _, api
 from odoo.tools import SQL
-from odoo.tools.misc import format_date
-
-from dateutil.relativedelta import relativedelta
-from itertools import chain
-import logging
 import datetime
-import pprint
-NUMBER_FIGURE_TYPES = ('float', 'integer', 'monetary', 'percentage')
-import logging
 
-_logger = logging.getLogger(__name__)
+NUMBER_FIGURE_TYPES = ('float', 'integer', 'monetary', 'percentage')
+
+
 class AccountReport(models.Model):
     _inherit = 'account.report'
 
-    def _init_options_currencies(self, options, previous_options=None):
+    def _init_options_currency_groups(self, options, previous_options=None):
         previous_options = previous_options or {}
-        currencies = self.env['res.currency'].search([])
+        groups = self.env['account.report.currency.group'].search([])
 
-        historical = previous_options.get('historical_currency', False)
-        selected_currency_id = previous_options.get('selected_currencies_id')
+        selected_id = previous_options.get('selected_currency_group_id')
+        if selected_id not in groups.ids:
+            selected_id = False
 
-        if selected_currency_id and selected_currency_id != self.env.company.currency_id.id:
-            historical = False
-        if historical:
-            selected_currency_id = False
+        options['currency_groups'] = [{'id': g.id, 'name': g.name} for g in groups]
+        options['selected_currency_group_id'] = selected_id
 
-        options['currencies'] = [
-            {'id': c.id, 'name': _(c.name), 'selected': c.id == selected_currency_id}
-            for c in currencies
-        ]
-        options['selected_currencies_id'] = selected_currency_id
-
-        if selected_currency_id:
-            options['selected_currencies'] = self.env['res.currency'].browse(selected_currency_id).name
+        if selected_id:
+            options['selected_currency_group_name'] = groups.browse(selected_id).name
         else:
-            options['selected_currencies'] = self.env.company.currency_id.name
+            options['selected_currency_group_name'] = self.env.company.currency_id.name
 
-        # Histórico USD: aplica a cualquier reporte que use este filtro de moneda.
-        options['historical_currency'] = historical
-        options['historical_currency_id'] = self.env.ref('base.USD').id if historical else False
-        options['currency_self_handled_report'] = historical
-        
+        options['currency_self_handled_report'] = bool(selected_id)
+
     def _build_column_dict(self, col_value, col_data, options=None, currency=False, digits=1,
                            column_expression=None, has_sublines=False, report_line_id=None):
         if col_value is None and col_data is None:
@@ -53,20 +35,9 @@ class AccountReport(models.Model):
         col_data = col_data or {}
         expression_label = col_data.get('expression_label')
     
-        target_currency_id = options.get('selected_currencies_id') or options.get('historical_currency_id')
-        self_handled_columns = options.get('currency_self_handled_columns') or set()
-        skip_value_conversion = (
-            options.get('currency_self_handled_report', False)
-            or expression_label in self_handled_columns
-        )
-    
-        if target_currency_id:
-            to_currency = self.env['res.currency'].browse(target_currency_id)
-            if to_currency:
-                currency = to_currency
-                if isinstance(col_value, (int, float)) and not skip_value_conversion:
-                    date_obj = datetime.datetime.strptime(options['date']['date_to'], '%Y-%m-%d').date()
-                    col_value = self.env.company.currency_id._convert(col_value, to_currency, date=date_obj)
+        group_id = options.get('selected_currency_group_id')
+        if group_id and expression_label in ('balance', 'debit', 'credit'):
+            currency = self.env['account.report.currency.group'].browse(group_id).reference_currency_id
     
         column_expression = column_expression or self.env['account.report.expression']
     
@@ -100,26 +71,26 @@ class AccountReport(models.Model):
     def _init_options_rounding_unit(self, options, previous_options=None):
         options['rounding_unit'] = previous_options.get('rounding_unit', 'decimals') if previous_options else 'decimals'
 
-        currency_name = previous_options.get('selected_currencies') or self.env.company.currency_id.name
-        currency_obj = self.env['res.currency'].search([('name', '=', currency_name)],
-                                                       limit=1) or self.env.company.currency_id
+        group_id = options.get('selected_currency_group_id')
+        if group_id:
+            currency_obj = self.env['account.report.currency.group'].browse(group_id).reference_currency_id
+        else:
+            currency_obj = self.env.company.currency_id
         options['rounding_unit_names'] = self._get_rounding_unit_names(currency_obj)
 
     def _get_rounding_unit_names(self, currency_obj):
         currency_symbol = currency_obj.symbol or self.env.company.currency_id.symbol
         return {
             'decimals': f'.{currency_symbol}',
-            'units': f'U {currency_symbol}',  # Ensures length >= 2
+            'units': f'U {currency_symbol}',
             'thousands': f'K{currency_symbol}',
             'millions': f'M{currency_symbol}',
         }
 
-
-
-    
     def _compute_formula_batch(self, column_group_options, engine, date_scope, formulas_dict, current_groupby, next_groupby, offset=0, limit=None, warnings=None):
-        if column_group_options.get('historical_currency') and engine in ('domain', 'account_codes', 'tax_tags'):
-            return super(AccountReport, self.with_context(historical_currency_usd=True))._compute_formula_batch(
+        group_id = column_group_options.get('selected_currency_group_id')
+        if group_id and engine in ('domain', 'account_codes', 'tax_tags'):
+            return super(AccountReport, self.with_context(currency_group_id=group_id))._compute_formula_batch(
                 column_group_options, engine, date_scope, formulas_dict, current_groupby, next_groupby,
                 offset=offset, limit=limit, warnings=warnings,
             )
@@ -129,17 +100,24 @@ class AccountReport(models.Model):
         )
 
     def _currency_table_apply_rate(self, value: SQL) -> SQL:
-        if self.env.context.get('historical_currency_usd'):
-            usd = self.env.ref('base.USD')
+        group_id = self.env.context.get('currency_group_id')
+        if group_id:
+            group = self.env['account.report.currency.group'].browse(group_id)
+            currency_ids = tuple(group.currency_ids.ids) or (0,)
+            ref_currency_id = group.reference_currency_id.id
             return SQL(
                 """
-                (%(value)s) * COALESCE((
-                    SELECT r.rate FROM res_currency_rate r
-                    WHERE r.currency_id = %(usd)s AND r.name <= account_move_line.date
-                    ORDER BY r.name DESC LIMIT 1
-                ), 0)
+                CASE
+                    WHEN account_move_line.currency_id IN %(currency_ids)s THEN account_move_line.amount_currency
+                    ELSE (%(value)s) * COALESCE((
+                        SELECT r.rate FROM res_currency_rate r
+                        WHERE r.currency_id = %(ref_currency)s AND r.name <= account_move_line.date
+                        ORDER BY r.name DESC LIMIT 1
+                    ), 0)
+                END
                 """,
                 value=value,
-                usd=usd.id,
+                currency_ids=currency_ids,
+                ref_currency=ref_currency_id,
             )
         return super()._currency_table_apply_rate(value)

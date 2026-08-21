@@ -25,6 +25,8 @@
     # always loaded
     "data": ["views/project_views.xml",
              "views/account_analytic.xml",
+             "views/currency_group.xml",
+             "security/ir.model.access.csv",
              #'data/general_ledger.xml',
              #'data/partner_ledger.xml',
             ],

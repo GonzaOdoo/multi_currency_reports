@@ -9,4 +9,5 @@ from . import analytic
 from . import currency_rate
 from . import budget_analytic
 from . import project_project
+from . import account_currency_group
 #from . import project_purchase

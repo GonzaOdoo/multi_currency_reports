@@ -3,18 +3,23 @@
     <!-- Extend the main filter template -->
     <t t-inherit="account_reports.AccountReportFilters" t-inherit-mode="extension">
         <xpath expr="." position="inside">
-            <t t-if="'currencies' in controller.options">
+            <t t-if="'currency_groups' in controller.options">
                 <div class="o_currency_filter">
-                    <t t-call="discount_button_on_invoice.AccountReportCurrenciesData"/>
+                    <t t-call="multi_currency_reports.AccountReportCurrencyGroupsData"/>
                 </div>
             </t>
         </xpath>
     </t>
     <t t-inherit="account_reports.AgedPartnerBalanceFilters" t-inherit-mode="extension">
         <xpath expr="." position="inside">
-            <t t-if="'currencies' in controller.options">
+            <t t-if="'currency_groups' in controller.options">
                 <div>
-                    <t t-call="discount_button_on_invoice.AccountReportCurrenciesData"/>
+                    <t t-call="multi_currency_reports.AccountReportCurrencyGroupsData"/>
+                </div>
+            </t>
+            <t t-if="'only_usd' in controller.options">
+                <div>
+                    <t t-call="multi_currency_reports.OnlyUsdFilterData"/>
                 </div>
             </t>
         </xpath>
